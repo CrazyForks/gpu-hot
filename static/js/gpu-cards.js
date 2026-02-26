@@ -42,89 +42,9 @@ function bulletClass(value, warnThreshold, dangerThreshold) {
     return '';
 }
 
-// Track enhanced overview mode
-let isEnhancedOverview = false;
-
-// ============================================
-// Overview Card (All GPUs view) — flat row
-// ============================================
-
-function createOverviewCard(gpuId, gpuInfo) {
-    const memory_used = getMetricValue(gpuInfo, 'memory_used', 0);
-    const memory_total = getMetricValue(gpuInfo, 'memory_total', 1);
-    const memPercent = (memory_used / memory_total) * 100;
-    const utilization = getMetricValue(gpuInfo, 'utilization', 0);
-    const temperature = getMetricValue(gpuInfo, 'temperature', 0);
-    const power_draw = getMetricValue(gpuInfo, 'power_draw', 0);
-    const power_limit = getMetricValue(gpuInfo, 'power_limit', 1);
-    const powerPercent = (power_draw / power_limit) * 100;
-
-    return `
-        <div class="overview-gpu-card" data-gpu-id="${gpuId}" onclick="switchToView('gpu-${gpuId}')">
-            <div class="overview-gpu-name">
-                <h2>GPU ${gpuId}</h2>
-                <p>${getMetricValue(gpuInfo, 'name', 'Unknown GPU')}</p>
-            </div>
-            <div class="overview-metrics">
-                <div class="overview-metric">
-                    <div class="overview-metric-value ${bulletClass(utilization, 80, 95)}" id="overview-util-${gpuId}">${utilization}%</div>
-                    <div class="overview-metric-label">UTIL</div>
-                </div>
-                <div class="overview-metric">
-                    <div class="overview-metric-value ${bulletClass(temperature, 75, 85)}" id="overview-temp-${gpuId}">${temperature}°</div>
-                    <div class="overview-metric-label">TEMP</div>
-                </div>
-                <div class="overview-metric">
-                    <div class="overview-metric-value ${bulletClass(memPercent, 85, 95)}" id="overview-mem-${gpuId}">${Math.round(memPercent)}%</div>
-                    <div class="overview-metric-label">MEM</div>
-                </div>
-                <div class="overview-metric">
-                    <div class="overview-metric-value ${bulletClass(powerPercent, 80, 95)}" id="overview-power-${gpuId}">${power_draw.toFixed(0)}W</div>
-                    <div class="overview-metric-label">POWER</div>
-                </div>
-            </div>
-            <div class="overview-mini-chart">
-                <canvas id="overview-chart-${gpuId}"></canvas>
-            </div>
-        </div>
-    `;
-}
-
-// Update overview card
+// Update overview card — delegates to enhanced updater
 function updateOverviewCard(gpuId, gpuInfo, shouldUpdateDOM = true) {
-    // Delegate to enhanced updater if enhanced overview is active
-    if (isEnhancedOverview) {
-        updateEnhancedOverviewCard(gpuId, gpuInfo, shouldUpdateDOM);
-        return;
-    }
-
-    const utilization = getMetricValue(gpuInfo, 'utilization', 0);
-    const temperature = getMetricValue(gpuInfo, 'temperature', 0);
-    const memory_used = getMetricValue(gpuInfo, 'memory_used', 0);
-    const memory_total = getMetricValue(gpuInfo, 'memory_total', 1);
-    const power_draw = getMetricValue(gpuInfo, 'power_draw', 0);
-    const power_limit = getMetricValue(gpuInfo, 'power_limit', 1);
-    const memPercent = (memory_used / memory_total) * 100;
-    const powerPercent = (power_draw / power_limit) * 100;
-
-    if (shouldUpdateDOM) {
-        const utilEl = document.getElementById(`overview-util-${gpuId}`);
-        const tempEl = document.getElementById(`overview-temp-${gpuId}`);
-        const memEl = document.getElementById(`overview-mem-${gpuId}`);
-        const powerEl = document.getElementById(`overview-power-${gpuId}`);
-
-        if (utilEl) { utilEl.textContent = `${utilization}%`; utilEl.className = `overview-metric-value ${bulletClass(utilization, 80, 95)}`; }
-        if (tempEl) { tempEl.textContent = `${temperature}°`; tempEl.className = `overview-metric-value ${bulletClass(temperature, 75, 85)}`; }
-        if (memEl) { memEl.textContent = `${Math.round(memPercent)}%`; memEl.className = `overview-metric-value ${bulletClass(memPercent, 85, 95)}`; }
-        if (powerEl) { powerEl.textContent = `${power_draw.toFixed(0)}W`; powerEl.className = `overview-metric-value ${bulletClass(powerPercent, 80, 95)}`; }
-    }
-
-    // Always update chart data
-    updateChart(gpuId, 'utilization', Number(getMetricValue(gpuInfo, 'utilization', 0)));
-
-    if (charts[gpuId] && charts[gpuId].overviewMini) {
-        charts[gpuId].overviewMini.update('none');
-    }
+    updateEnhancedOverviewCard(gpuId, gpuInfo, shouldUpdateDOM);
 }
 
 // ============================================
@@ -132,7 +52,6 @@ function updateOverviewCard(gpuId, gpuInfo, shouldUpdateDOM = true) {
 // ============================================
 
 function createEnhancedOverviewCard(gpuId, gpuInfo) {
-    isEnhancedOverview = true;
 
     const memory_used = getMetricValue(gpuInfo, 'memory_used', 0);
     const memory_total = getMetricValue(gpuInfo, 'memory_total', 1);
@@ -413,12 +332,14 @@ function createGPUCard(gpuId, gpuInfo) {
     }
 
     if (hasMetric(gpuInfo, 'encoder_sessions')) {
+        const encUtil = hasMetric(gpuInfo, 'encoder_utilization') ? `${gpuInfo.encoder_utilization}%` : '';
         extraMetrics += `
             <div class="metric-cell">
                 <div class="metric-num-row">
                     <span class="metric-num" id="encoder-${gpuId}">${gpuInfo.encoder_sessions}</span>
                 </div>
                 <span class="metric-label">ENC SESS</span>
+                ${encUtil ? `<span class="metric-sub" id="enc-util-${gpuId}">${encUtil} utilization</span>` : ''}
             </div>`;
     }
 
@@ -458,12 +379,14 @@ function createGPUCard(gpuId, gpuInfo) {
     }
 
     if (hasMetric(gpuInfo, 'decoder_sessions')) {
+        const decUtil = hasMetric(gpuInfo, 'decoder_utilization') ? `${gpuInfo.decoder_utilization}%` : '';
         extraMetrics += `
             <div class="metric-cell">
                 <div class="metric-num-row">
                     <span class="metric-num" id="decoder-${gpuId}">${gpuInfo.decoder_sessions}</span>
                 </div>
                 <span class="metric-label">DEC SESS</span>
+                ${decUtil ? `<span class="metric-sub" id="dec-util-${gpuId}">${decUtil} utilization</span>` : ''}
             </div>`;
     }
 
@@ -587,6 +510,27 @@ function createGPUCard(gpuId, gpuInfo) {
                     </div>
                 </div>
                 <div class="sparkline-canvas-wrap"><canvas id="chart-appclocks-${gpuId}"></canvas></div>
+            </div>`;
+    }
+
+    let encDecChart = '';
+    if (hasMetric(gpuInfo, 'encoder_utilization') || hasMetric(gpuInfo, 'decoder_utilization')) {
+        encDecChart = `
+            <div class="sparkline-container" data-chart-type="encoderDecoder" data-gpu-id="${gpuId}">
+                <div class="sparkline-header">
+                    <span class="sparkline-title">Encoder / Decoder</span>
+                    <div class="sparkline-stats">
+                        <div class="sparkline-stat">
+                            <span class="sparkline-stat-label">Enc</span>
+                            <span class="sparkline-stat-value" id="stat-encDec-enc-current-${gpuId}">0%</span>
+                        </div>
+                        <div class="sparkline-stat">
+                            <span class="sparkline-stat-label">Dec</span>
+                            <span class="sparkline-stat-value" id="stat-encDec-dec-current-${gpuId}">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="sparkline-canvas-wrap"><canvas id="chart-encoderDecoder-${gpuId}"></canvas></div>
             </div>`;
     }
 
@@ -756,6 +700,7 @@ function createGPUCard(gpuId, gpuInfo) {
 
                     ${pcieChart}
                     ${appClocksChart}
+                    ${encDecChart}
                 </div>
             </div>
 
@@ -919,6 +864,10 @@ function updateGPUDisplay(gpuId, gpuInfo, shouldUpdateDOM = true) {
         if (pstateEl) pstateEl.textContent = `${getMetricValue(gpuInfo, 'performance_state', 'N/A')}`;
         if (encoderEl) encoderEl.textContent = `${getMetricValue(gpuInfo, 'encoder_sessions', 0)}`;
 
+        // Encoder/Decoder utilization sub-labels
+        const encUtilEl = document.getElementById(`enc-util-${gpuId}`);
+        if (encUtilEl) encUtilEl.textContent = `${getMetricValue(gpuInfo, 'encoder_utilization', 0)}% utilization`;
+
         // Header badges
         const pstateHeaderEl = document.getElementById(`pstate-header-${gpuId}`);
         const pcieHeaderEl = document.getElementById(`pcie-header-${gpuId}`);
@@ -953,6 +902,8 @@ function updateGPUDisplay(gpuId, gpuInfo, shouldUpdateDOM = true) {
             const ds = getMetricValue(gpuInfo, 'decoder_sessions', null);
             decoderEl.textContent = ds !== null ? `${ds}` : 'N/A';
         }
+        const decUtilEl = document.getElementById(`dec-util-${gpuId}`);
+        if (decUtilEl) decUtilEl.textContent = `${getMetricValue(gpuInfo, 'decoder_utilization', 0)}% utilization`;
         if (throttleEl) {
             const tr = getMetricValue(gpuInfo, 'throttle_reasons', 'None');
             const isT = tr && tr !== 'None' && tr !== 'N/A';
@@ -1036,6 +987,13 @@ function updateGPUDisplay(gpuId, gpuInfo, shouldUpdateDOM = true) {
             gpuInfo.clock_video_app || gpuInfo.clock_video || 0
         );
     }
+
+    if (hasMetric(gpuInfo, 'encoder_utilization') || hasMetric(gpuInfo, 'decoder_utilization')) {
+        updateChart(gpuId, 'encoderDecoder',
+            gpuInfo.encoder_utilization || 0,
+            gpuInfo.decoder_utilization || 0
+        );
+    }
 }
 
 // ============================================
@@ -1048,7 +1006,7 @@ function updateProcesses(processes) {
 
     if (countEl) {
         countEl.textContent = processes.length === 0 ? '0' :
-                             `${processes.length}`;
+            `${processes.length}`;
     }
 
     if (processes.length === 0) {

@@ -33,21 +33,22 @@ const COMPANION = {
 // ============================================
 
 const chartMeta = {
-    utilization:   { title: 'GPU Utilization',   unit: '%',     decimals: 1, yMax: 100 },
-    temperature:   { title: 'Temperature',       unit: '°C',    decimals: 1, ySuggestedMax: 90 },
-    memory:        { title: 'VRAM Usage',        unit: '%',     decimals: 1, yMax: 100 },
-    power:         { title: 'Power Draw',        unit: 'W',     decimals: 1, ySuggestedMax: 200 },
-    fanSpeed:      { title: 'Fan Speed',         unit: '%',     decimals: 1, yMax: 100 },
-    clocks:        { title: 'Clock Speeds',      unit: ' MHz',  decimals: 0 },
-    efficiency:    { title: 'Power Efficiency',  unit: ' %/W',  decimals: 2 },
-    pcie:          { title: 'PCIe Throughput',   unit: ' KB/s', decimals: 0 },
-    appclocks:     { title: 'App Clocks',        unit: ' MHz',  decimals: 0 },
-    systemCpu:     { title: 'CPU Usage',         unit: '%',     decimals: 1, yMax: 100 },
-    systemMemory:  { title: 'RAM Usage',         unit: '%',     decimals: 1, yMax: 100 },
-    systemSwap:    { title: 'Swap Usage',        unit: '%',     decimals: 1, yMax: 100 },
-    systemNetIo:   { title: 'Network I/O',       unit: ' KB/s', decimals: 1 },
-    systemDiskIo:  { title: 'Disk I/O',          unit: ' KB/s', decimals: 1 },
-    systemLoadAvg: { title: 'Load Average',      unit: '',      decimals: 2, ySuggestedMax: 4 },
+    utilization: { title: 'GPU Utilization', unit: '%', decimals: 1, yMax: 100 },
+    temperature: { title: 'Temperature', unit: '°C', decimals: 1, ySuggestedMax: 90 },
+    memory: { title: 'VRAM Usage', unit: '%', decimals: 1, yMax: 100 },
+    power: { title: 'Power Draw', unit: 'W', decimals: 1, ySuggestedMax: 200 },
+    fanSpeed: { title: 'Fan Speed', unit: '%', decimals: 1, yMax: 100 },
+    clocks: { title: 'Clock Speeds', unit: ' MHz', decimals: 0 },
+    efficiency: { title: 'Power Efficiency', unit: ' %/W', decimals: 2 },
+    pcie: { title: 'PCIe Throughput', unit: ' KB/s', decimals: 0 },
+    appclocks: { title: 'App Clocks', unit: ' MHz', decimals: 0 },
+    encoderDecoder: { title: 'Encoder / Decoder', unit: '%', decimals: 0, yMax: 100 },
+    systemCpu: { title: 'CPU Usage', unit: '%', decimals: 1, yMax: 100 },
+    systemMemory: { title: 'RAM Usage', unit: '%', decimals: 1, yMax: 100 },
+    systemSwap: { title: 'Swap Usage', unit: '%', decimals: 1, yMax: 100 },
+    systemNetIo: { title: 'Network I/O', unit: ' KB/s', decimals: 1 },
+    systemDiskIo: { title: 'Disk I/O', unit: ' KB/s', decimals: 1 },
+    systemLoadAvg: { title: 'Load Average', unit: '', decimals: 2, ySuggestedMax: 4 },
 };
 
 // ============================================
@@ -55,20 +56,21 @@ const chartMeta = {
 // ============================================
 
 const companionMap = {
-    utilization:   ['temperature', 'power', 'memory', 'clocks'],
-    temperature:   ['utilization', 'fanSpeed', 'power'],
-    memory:        ['utilization', 'power'],
-    power:         ['utilization', 'temperature', 'clocks'],
-    fanSpeed:      ['temperature', 'utilization'],
-    clocks:        ['utilization', 'power', 'temperature'],
-    efficiency:    ['utilization', 'power'],
-    pcie:          ['utilization', 'memory'],
-    appclocks:     ['utilization', 'power'],
-    systemCpu:     ['systemMemory', 'systemSwap', 'systemLoadAvg'],
-    systemMemory:  ['systemCpu', 'systemSwap'],
-    systemSwap:    ['systemMemory', 'systemCpu'],
-    systemNetIo:   ['systemCpu', 'systemDiskIo'],
-    systemDiskIo:  ['systemCpu', 'systemNetIo'],
+    utilization: ['temperature', 'power', 'memory', 'clocks'],
+    temperature: ['utilization', 'fanSpeed', 'power'],
+    memory: ['utilization', 'power'],
+    power: ['utilization', 'temperature', 'clocks'],
+    fanSpeed: ['temperature', 'utilization'],
+    clocks: ['utilization', 'power', 'temperature'],
+    efficiency: ['utilization', 'power'],
+    pcie: ['utilization', 'memory'],
+    appclocks: ['utilization', 'power'],
+    encoderDecoder: ['utilization', 'power', 'memory'],
+    systemCpu: ['systemMemory', 'systemSwap', 'systemLoadAvg'],
+    systemMemory: ['systemCpu', 'systemSwap'],
+    systemSwap: ['systemMemory', 'systemCpu'],
+    systemNetIo: ['systemCpu', 'systemDiskIo'],
+    systemDiskIo: ['systemCpu', 'systemNetIo'],
     systemLoadAvg: ['systemCpu', 'systemMemory'],
 };
 
@@ -81,13 +83,14 @@ function getPrimaryDataArray(gpuId, type) {
     const d = chartData[gpuId] && chartData[gpuId][type];
     if (!d) return null;
     switch (type) {
-        case 'clocks':        return d.graphicsData;
-        case 'pcie':          return d.dataRX;
-        case 'appclocks':     return d.dataGr;
-        case 'systemNetIo':   return d.dataRX;
-        case 'systemDiskIo':  return d.dataRead;
+        case 'clocks': return d.graphicsData;
+        case 'pcie': return d.dataRX;
+        case 'appclocks': return d.dataGr;
+        case 'encoderDecoder': return d.dataEnc;
+        case 'systemNetIo': return d.dataRX;
+        case 'systemDiskIo': return d.dataRead;
         case 'systemLoadAvg': return d.data1m;
-        default:              return d.data;
+        default: return d.data;
     }
 }
 
@@ -182,15 +185,16 @@ function createDrawerChart() {
     const primaryArr = getPrimaryDataArray(gpuId, chartType);
 
     // Multi-line primary types get all their sub-lines
-    const isMultiLine = ['clocks', 'pcie', 'appclocks', 'systemNetIo', 'systemDiskIo', 'systemLoadAvg'].includes(chartType);
+    const isMultiLine = ['clocks', 'pcie', 'appclocks', 'encoderDecoder', 'systemNetIo', 'systemDiskIo', 'systemLoadAvg'].includes(chartType);
 
     if (isMultiLine) {
         const multiDefs = {
-            clocks:        [{ key: 'graphicsData', label: 'Graphics' }, { key: 'smData', label: 'SM' }, { key: 'memoryData', label: 'Memory' }],
-            pcie:          [{ key: 'dataRX', label: 'RX' }, { key: 'dataTX', label: 'TX' }],
-            appclocks:     [{ key: 'dataGr', label: 'Graphics' }, { key: 'dataMem', label: 'Memory' }, { key: 'dataSM', label: 'SM' }, { key: 'dataVideo', label: 'Video' }],
-            systemNetIo:   [{ key: 'dataRX', label: 'RX' }, { key: 'dataTX', label: 'TX' }],
-            systemDiskIo:  [{ key: 'dataRead', label: 'Read' }, { key: 'dataWrite', label: 'Write' }],
+            clocks: [{ key: 'graphicsData', label: 'Graphics' }, { key: 'smData', label: 'SM' }, { key: 'memoryData', label: 'Memory' }],
+            pcie: [{ key: 'dataRX', label: 'RX' }, { key: 'dataTX', label: 'TX' }],
+            appclocks: [{ key: 'dataGr', label: 'Graphics' }, { key: 'dataMem', label: 'Memory' }, { key: 'dataSM', label: 'SM' }, { key: 'dataVideo', label: 'Video' }],
+            encoderDecoder: [{ key: 'dataEnc', label: 'Encoder' }, { key: 'dataDec', label: 'Decoder' }],
+            systemNetIo: [{ key: 'dataRX', label: 'RX' }, { key: 'dataTX', label: 'TX' }],
+            systemDiskIo: [{ key: 'dataRead', label: 'Read' }, { key: 'dataWrite', label: 'Write' }],
             systemLoadAvg: [{ key: 'data1m', label: '1m' }, { key: 'data5m', label: '5m' }, { key: 'data15m', label: '15m' }],
         };
         const whiteAlphas = [0.7, 0.4, 0.25, 0.15];
@@ -327,9 +331,9 @@ function createDrawerChart() {
                 },
                 tooltip: {
                     enabled: true,
-                    backgroundColor: '#1a1a1c',
-                    titleColor: '#ffffff',
-                    bodyColor: 'rgba(255,255,255,0.7)',
+                    backgroundColor: '#1e2330',
+                    titleColor: '#eef0f4',
+                    bodyColor: 'rgba(238, 240, 244, 0.7)',
                     borderWidth: 0,
                     padding: 10,
                     cornerRadius: 4,
