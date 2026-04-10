@@ -132,6 +132,9 @@ function setupScrollDetection() {
 // Initialize scroll detection
 setupScrollDetection();
 
+// Track whether the aggregate summary card has been injected
+let aggregateCardInjected = false;
+
 // Performance: Batched rendering system using requestAnimationFrame
 // Batches all DOM updates into a single frame to minimize reflows/repaints
 let pendingUpdates = new Map(); // Queue of pending GPU/system updates
@@ -155,6 +158,7 @@ function handleSocketMessage(event) {
     // Clear loading state
     if (overviewContainer.querySelector('.loading')) {
         overviewContainer.innerHTML = '';
+        aggregateCardInjected = false;
     }
 
     const gpuCount = Object.keys(data.gpus).length;
@@ -241,6 +245,21 @@ function handleSocketMessage(event) {
         }
     });
 
+    // Aggregate summary card (2+ GPUs)
+    if (gpuCount >= 2) {
+        if (!aggregateCardInjected) {
+            overviewContainer.insertAdjacentHTML('afterbegin', createAggregateCard());
+            aggregateCardInjected = true;
+            initAggregateChart();
+        }
+        pendingUpdates.set('_aggregate', { gpus: data.gpus });
+    } else if (aggregateCardInjected) {
+        const aggCard = document.getElementById('aggregate-card');
+        if (aggCard) aggCard.remove();
+        destroyAggregateChart();
+        aggregateCardInjected = false;
+    }
+
     // Queue system updates (processes/CPU/RAM) for batching
     if (!lastDOMUpdate.system || (now - lastDOMUpdate.system) >= DOM_UPDATE_INTERVAL) {
         pendingUpdates.set('_system', {
@@ -273,7 +292,10 @@ function processBatchedUpdates() {
 
     // Execute all queued updates in a single batch
     pendingUpdates.forEach((update, gpuId) => {
-        if (gpuId === '_system') {
+        if (gpuId === '_aggregate') {
+            updateAggregateStats(update.gpus);
+            return;
+        } else if (gpuId === '_system') {
             // System updates (CPU, RAM, processes)
             updateProcesses(update.processes);
             updateSystemInfo(update.system);
@@ -416,6 +438,7 @@ function handleClusterData(data) {
     // Clear loading state
     if (overviewContainer.querySelector('.loading')) {
         overviewContainer.innerHTML = '';
+        aggregateCardInjected = false;
     }
 
     // Skip DOM updates during scrolling
@@ -439,7 +462,6 @@ function handleClusterData(data) {
                         });
                     }
                     updateAllChartDataOnly(fullGpuId, gpuInfo);
-                    // Also update system chart data during scroll (per-node)
                     if (nodeData.system) {
                         updateGPUSystemCharts(fullGpuId, nodeData.system, nodeName, false);
                     }
@@ -524,6 +546,30 @@ function handleClusterData(data) {
             nodeGroup.remove();
         }
     });
+
+    // Aggregate summary card (2+ GPUs across cluster)
+    const clusterGpusFlat = {};
+    Object.entries(data.nodes).forEach(([nodeName, nodeData]) => {
+        if (nodeData.status === 'online') {
+            Object.entries(nodeData.gpus).forEach(([gpuId, gpuInfo]) => {
+                clusterGpusFlat[`${nodeName}-${gpuId}`] = gpuInfo;
+            });
+        }
+    });
+    const clusterGpuCount = Object.keys(clusterGpusFlat).length;
+    if (clusterGpuCount >= 2) {
+        if (!aggregateCardInjected) {
+            overviewContainer.insertAdjacentHTML('afterbegin', createAggregateCard());
+            aggregateCardInjected = true;
+            initAggregateChart();
+        }
+        pendingUpdates.set('_aggregate', { gpus: clusterGpusFlat });
+    } else if (aggregateCardInjected) {
+        const aggCard = document.getElementById('aggregate-card');
+        if (aggCard) aggCard.remove();
+        destroyAggregateChart();
+        aggregateCardInjected = false;
+    }
 
     // Update processes and system info (use first online node)
     const firstOnlineNode = Object.values(data.nodes).find(n => n.status === 'online');
